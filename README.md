@@ -30,7 +30,7 @@
 - **动画库**: [Framer Motion](https://www.framer.com/motion/)
 - **图标库**: [Lucide React](https://lucide.dev/)
 - **主题管理**: [next-themes](https://github.com/pacocoursey/next-themes) + View Transitions API
-- **后端处理**: Next.js API Routes + Axios + Cheerio (用于爬虫与解析)
+- **后端处理**: Next.js API Routes + Axios + Cheerio
 
 ## 🚀 快速开始
 
@@ -100,6 +100,23 @@ coco-downloader/
 
 ### 音乐源扩展
 项目后端采用策略模式设计。在 `src/lib/providers` 下定义了统一的接口。若需添加新的音乐网站源，只需新建一个实现类并在工厂方法中注册即可，无需大幅修改前端逻辑。
+
+## 🚀 部署方案
+
+### 方案一：本地部署
+
+```bash
+npm run build
+npm start
+```
+
+### 方案二：Docker 部署
+
+```bash
+docker build -t coco-web -f Dockerfile .
+docker run -p 3000:3000 coco-web
+```
+
 
 ## 🤝 贡献与反馈
 

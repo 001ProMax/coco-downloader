@@ -235,8 +235,9 @@ export default function Home() {
           {/* Provider Selector */}
           <div className="flex justify-center mb-6 gap-3">
             {[
-              { id: 'gequbao', name: '渠道1' },
-              { id: 'qqmp3', name: '渠道2' }
+              { id: 'gequbao', name: '歌曲宝' },
+              { id: 'qqmp3', name: 'QQMP3' },
+              { id: 'migu', name: '咪咕' }
             ].map((p) => (
               <button
                 key={p.id}

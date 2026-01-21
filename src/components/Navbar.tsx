@@ -12,7 +12,7 @@ export function Navbar() {
   const [mounted, setMounted] = useState<boolean>(false);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     setMounted(true);
   }, []);
 
