@@ -49,7 +49,7 @@ export default function RootLayout({
           >
             CoCoMusic官网
           </a>
-          <span>或加入qq群：7744351610</span>
+          <span>或加入qq群：774351610</span>
         </div>
         <Navbar />
         <div className="pt-24 min-h-screen">
