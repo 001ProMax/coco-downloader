@@ -1,0 +1,7 @@
+services:
+  coco-downloader:
+    image: markcxx/coco-downloader:latest
+    container_name: coco-downloader
+    restart: unless-stopped
+    ports:
+      - "3000:3000"

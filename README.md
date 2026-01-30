@@ -113,8 +113,8 @@ npm start
 ### 方案二：Docker 部署
 
 ```bash
-docker build -t coco-web -f Dockerfile .
-docker run -p 3000:3000 coco-web
+docker build -t coco-downloader -f Dockerfile .
+docker run -p 3000:3000 coco-downloader
 ```
 
 
