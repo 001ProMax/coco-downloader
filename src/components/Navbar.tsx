@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Github, Sun, Moon } from "lucide-react";
+import { Github, Sun, Moon, Heart } from "lucide-react";
 import { useState, MouseEvent } from "react";
 import { useTheme } from "next-themes";
 import DeveloperPanel from "./DeveloperPanel";
+import { DonationModal } from "./DonationModal";
 
 export function Navbar() {
   const [showDevPanel, setShowDevPanel] = useState(false);
+  const [showDonation, setShowDonation] = useState(false);
   const { theme, setTheme, resolvedTheme } = useTheme();
   const currentTheme = resolvedTheme ?? theme ?? "light";
 
@@ -59,19 +61,20 @@ export function Navbar() {
           <Image src="/images/cherry-logo.svg" alt="Logo" width={40} height={40} className="h-10 w-auto transition-transform" />
         </Link>
         
-        <div className="flex items-center gap-4">
-          <Link 
-            href="/" 
-            className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-sky-500 dark:hover:text-sky-400 transition-colors"
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowDonation(true)}
+            className="p-2 text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-full transition-all duration-300 cursor-pointer"
+            title="支持作者"
           >
-            首页
-          </Link>
+            <Heart className="w-5 h-5" />
+          </button>
           
           <a 
             href="https://github.com/markcxx/coco-downloader" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+            className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-all duration-300 cursor-pointer"
           >
             <Github className="w-5 h-5" />
           </a>
@@ -91,6 +94,7 @@ export function Navbar() {
       </nav>
 
       <DeveloperPanel open={showDevPanel} onClose={() => setShowDevPanel(false)} />
+      <DonationModal isOpen={showDonation} onClose={() => setShowDonation(false)} />
     </>
   );
 }

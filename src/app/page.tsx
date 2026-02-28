@@ -46,6 +46,8 @@ const SourceLinkButton = ({ item }: { item: MusicItem }) => {
   );
 };
 
+type PlayMode = "order" | "shuffle" | "single";
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [provider, setProvider] = useState("all");
@@ -59,6 +61,9 @@ export default function Home() {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playMode, setPlayMode] = useState<PlayMode>("order");
+  const [shuffleOrder, setShuffleOrder] = useState<string[]>([]);
+  const [shuffleIndex, setShuffleIndex] = useState(-1);
 
   const [searched, setSearched] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -68,37 +73,14 @@ export default function Home() {
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  // Initialize Audio
-  useEffect(() => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
+  const buildShuffleOrder = (ids: string[]) => {
+    const next = [...ids];
+    for (let i = next.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
     }
-    const audio = audioRef.current;
-
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const handleLoadedMetadata = () => {
-      setDuration(audio.duration);
-      if (playing) audio.play().catch(() => setPlaying(false));
-    };
-    const handleEnded = () => setPlaying(false);
-
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('ended', handleEnded);
-
-    return () => {
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('ended', handleEnded);
-    };
-  }, [playing]);
-
-  // Sync Volume
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume;
-    }
-  }, [volume]);
+    return next;
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +102,39 @@ export default function Home() {
     }
   };
 
+  const syncShuffleIndex = (id: string) => {
+    const index = shuffleOrder.indexOf(id);
+    if (index >= 0) {
+      setShuffleIndex(index);
+      return;
+    }
+    if (results.length > 0) {
+      const ids = results.map(r => r.id);
+      const nextOrder = buildShuffleOrder(ids);
+      setShuffleOrder(nextOrder);
+      setShuffleIndex(nextOrder.indexOf(id));
+    } else {
+      setShuffleIndex(-1);
+    }
+  };
+
+  const getNextIndexById = (id: string) => {
+    if (playMode === "shuffle") {
+      const order = shuffleOrder.length > 0 ? shuffleOrder : results.map(r => r.id);
+      const orderIndex = order.indexOf(id);
+      if (orderIndex >= 0 && orderIndex < order.length - 1) {
+        const nextId = order[orderIndex + 1];
+        return results.findIndex(r => r.id === nextId);
+      }
+      return -1;
+    }
+    const index = results.findIndex(r => r.id === id);
+    if (index >= 0 && index < results.length - 1) {
+      return index + 1;
+    }
+    return -1;
+  };
+
   const handlePlay = async (item: MusicItem) => {
     if (activeMusic?.id === item.id) {
       if (playing) {
@@ -138,6 +153,7 @@ export default function Home() {
       }
       
       setActiveMusic(item);
+      syncShuffleIndex(item.id);
       setPlaying(false); // Wait for load
       setCurrentTime(0);
 
@@ -154,15 +170,34 @@ export default function Home() {
         audioRef.current.load();
         audioRef.current.play()
           .then(() => setPlaying(true))
-          .catch(e => console.error("Play failed", e));
+          .catch(e => {
+            console.error("Play failed", e);
+            const nextIndex = getNextIndexById(item.id);
+            if (nextIndex >= 0) {
+              handlePlay(results[nextIndex]);
+            } else {
+              setActiveMusic(null);
+              setPlaying(false);
+            }
+          });
       } else {
-        alert("无法获取播放地址");
-        setActiveMusic(null);
+        const nextIndex = getNextIndexById(item.id);
+        if (nextIndex >= 0) {
+          handlePlay(results[nextIndex]);
+        } else {
+          setActiveMusic(null);
+          setPlaying(false);
+        }
       }
     } catch (err) {
       console.error(err);
-      alert("播放出错");
-      setActiveMusic(null);
+      const nextIndex = getNextIndexById(item.id);
+      if (nextIndex >= 0) {
+        handlePlay(results[nextIndex]);
+      } else {
+        setActiveMusic(null);
+        setPlaying(false);
+      }
     }
   };
 
@@ -172,6 +207,31 @@ export default function Home() {
       setCurrentTime(time);
     }
   };
+
+  useEffect(() => {
+    const ids = results.map(r => r.id);
+    if (ids.length === 0) {
+      setShuffleOrder([]);
+      setShuffleIndex(-1);
+      return;
+    }
+    setShuffleOrder(buildShuffleOrder(ids));
+  }, [results]);
+
+  useEffect(() => {
+    if (!activeMusic) {
+      setShuffleIndex(-1);
+      return;
+    }
+    const index = shuffleOrder.indexOf(activeMusic.id);
+    setShuffleIndex(index);
+  }, [activeMusic, shuffleOrder]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
 
   const executeDownload = async (task: DownloadTask) => {
     try {
@@ -316,18 +376,96 @@ export default function Home() {
     setDownloadingCount(0);
   };
 
-  // Next/Prev logic could be implemented if we track index
   const currentIndex = activeMusic ? results.findIndex(r => r.id === activeMusic.id) : -1;
-  const handleNext = () => {
-    if (currentIndex >= 0 && currentIndex < results.length - 1) {
-      handlePlay(results[currentIndex + 1]);
+  const getNextIndex = () => {
+    if (!activeMusic) return -1;
+    if (playMode === "shuffle") {
+      if (shuffleIndex >= 0 && shuffleIndex < shuffleOrder.length - 1) {
+        const nextId = shuffleOrder[shuffleIndex + 1];
+        return results.findIndex(r => r.id === nextId);
+      }
+      return -1;
     }
+    if (currentIndex >= 0 && currentIndex < results.length - 1) {
+      return currentIndex + 1;
+    }
+    return -1;
+  };
+
+  const getPrevIndex = () => {
+    if (!activeMusic) return -1;
+    if (playMode === "shuffle") {
+      if (shuffleIndex > 0) {
+        const prevId = shuffleOrder[shuffleIndex - 1];
+        return results.findIndex(r => r.id === prevId);
+      }
+      return -1;
+    }
+    if (currentIndex > 0) {
+      return currentIndex - 1;
+    }
+    return -1;
+  };
+
+  const canNext = getNextIndex() >= 0;
+  const canPrev = getPrevIndex() >= 0;
+
+  const handleNext = () => {
+    const nextIndex = getNextIndex();
+    if (nextIndex >= 0) handlePlay(results[nextIndex]);
   };
   const handlePrev = () => {
-    if (currentIndex > 0) {
-      handlePlay(results[currentIndex - 1]);
-    }
+    const prevIndex = getPrevIndex();
+    if (prevIndex >= 0) handlePlay(results[prevIndex]);
   };
+
+  const togglePlayMode = () => {
+    setPlayMode(prev => {
+      if (prev === "order") return "shuffle";
+      if (prev === "shuffle") return "single";
+      return "order";
+    });
+  };
+
+  useEffect(() => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+    }
+    const audio = audioRef.current;
+
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+      if (playing) audio.play().catch(() => setPlaying(false));
+    };
+    const handleEnded = () => {
+      if (playMode === "single") {
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          audioRef.current.play()
+            .then(() => setPlaying(true))
+            .catch(() => setPlaying(false));
+        }
+        return;
+      }
+      const nextIndex = getNextIndex();
+      if (nextIndex >= 0) {
+        handlePlay(results[nextIndex]);
+      } else {
+        setPlaying(false);
+      }
+    };
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, [playing, playMode, results, activeMusic, shuffleIndex, shuffleOrder, getNextIndex, handlePlay]);
 
   return (
     <main className="min-h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans selection:bg-sky-100 dark:selection:bg-sky-900 pb-32 transition-colors duration-300">
@@ -726,8 +864,10 @@ export default function Home() {
                 setPlaying(true);
               }
             }}
-            onNext={currentIndex < results.length - 1 ? handleNext : undefined}
-            onPrev={currentIndex > 0 ? handlePrev : undefined}
+            onNext={canNext ? handleNext : undefined}
+            onPrev={canPrev ? handlePrev : undefined}
+            playMode={playMode}
+            onTogglePlayMode={togglePlayMode}
             currentTime={currentTime}
             duration={duration}
             onSeek={handleSeek}

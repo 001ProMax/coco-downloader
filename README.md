@@ -4,6 +4,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.0-38B2AC)
 ![License](https://img.shields.io/badge/License-MIT-green)
+![Docker](https://img.shields.io/badge/Docker-Supported-2496ED)
 
 ## 📖 简介
 
@@ -14,13 +15,33 @@
 ## ✨ 主要特性
 
 - 🎵 **多源聚合搜索**：支持全网聚合搜索，内置多种音乐源渠道，一键切换。
-- 🎧 **在线试听**：内置精美悬浮播放器，支持播放/暂停、进度拖拽、音量调节、上下曲切换。
+- 🎧 **在线试听**：内置精美悬浮播放器，支持播放/暂停、进度拖拽、音量调节、上下曲切换、**播放模式切换（顺序/随机/单曲）**。
 - 🖱️ **便捷交互**：支持列表**双击播放**，鼠标悬停/选中效果优化，操作流畅。
 - ⬇️ **批量下载**：支持多选歌曲，一键批量打包下载选中的音乐。
 - 🌓 **极致主题体验**：
     - 完美适配**深色/浅色模式**。
     - 独家定制的**涟漪扩散**切换动画（基于 View Transitions API），视觉效果惊艳。
 - ⚡ **现代化技术栈**：基于 React 19、Next.js 16 App Router、Tailwind CSS v4 构建。
+
+## 🎹 支持音源与音质说明
+
+本项目聚合了多个第三方音乐搜索引擎，各音源的特性如下：
+
+| 音源名称 | 标识 (ID) | 默认音质 | 备注 |
+| :--- | :--- | :--- | :--- |
+| **歌曲宝** | `gequbao` | 128kbps / 320kbps | 综合性强，搜索结果较多 |
+| **歌曲海** | `gequhai` | 128kbps | 响应速度快 |
+| **布谷** | `bugu` | 128kbps / 320kbps | 包含部分冷门资源 |
+| **QQ音乐** | `qq` | 128kbps | 官方源接口 |
+| **QQMP3** | `qqmp3` | 320kbps / Flac | 可能会解析到高音质或无损 |
+| **咪咕** | `migu` | 128kbps - Flac | **支持无损**，视具体歌曲资源而定 |
+| **力音** | `livepoo` | 128kbps | 备用源 |
+| **煎饼系列** | `jianbin-*` | 128kbps | 包含网易/QQ/酷狗/酷我等多平台聚合 |
+
+> **⚠️ 关于音质的重要说明：**
+> 1. **不支持自定义音质选择**：本程序自动解析目标源提供的默认最高可用音质。
+> 2. **无损音质支持**：部分音源（如咪咕、QQMP3等）在资源允许的情况下会自动解析出 **FLAC** 无损格式，请自行探索尝试。
+> 3. **解析策略**：程序会自动尝试获取最佳播放链接，若某个源无法播放，建议切换其他源重试。
 
 ## 🛠 技术栈
 
@@ -112,11 +133,28 @@ npm start
 
 ### 方案二：Docker 部署
 
-```bash
-docker build -t coco-downloader -f Dockerfile .
-docker run -p 3000:3000 coco-downloader
-```
+本项目支持 Docker 快速部署，且支持自定义端口。
 
+1. **构建镜像**
+   ```bash
+   docker build -t coco-downloader .
+   ```
+
+2. **运行容器**
+   ```bash
+   # 默认运行在 3000 端口
+   docker run -d -p 3000:3000 --name coco-downloader coco-downloader
+
+   # 自定义端口 (例如 8080)
+   docker run -d -p 8080:3000 -e PORT=3000 --name coco-downloader coco-downloader
+   ```
+
+## ⚠️ 免责声明
+
+1. 本项目仅供**个人学习与技术交流**使用，严禁用于任何商业用途。
+2. 本项目所有音乐资源均来源于互联网第三方网站，本项目仅提供数据聚合与检索服务，不存储任何音乐文件。
+3. 若您发现本项目侵犯了您的权益，请联系我们进行删除。
+4. 使用本项目产生的任何法律后果由使用者自行承担。
 
 ## 🤝 贡献与反馈
 

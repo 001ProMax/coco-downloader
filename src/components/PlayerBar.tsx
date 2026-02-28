@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Shuffle, Repeat, Repeat1 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { MusicItem } from "@/types/music";
@@ -13,6 +13,8 @@ interface PlayerBarProps {
   onPlayPause: () => void;
   onNext?: () => void;
   onPrev?: () => void;
+  playMode: "order" | "shuffle" | "single";
+  onTogglePlayMode: () => void;
   currentTime: number;
   duration: number;
   onSeek: (time: number) => void;
@@ -26,6 +28,8 @@ export function PlayerBar({
   onPlayPause,
   onNext,
   onPrev,
+  playMode,
+  onTogglePlayMode,
   currentTime,
   duration,
   onSeek,
@@ -41,6 +45,9 @@ export function PlayerBar({
   };
 
   if (!currentMusic) return null;
+
+  const modeLabel = playMode === "shuffle" ? "随机播放" : playMode === "single" ? "单曲循环" : "顺序播放";
+  const ModeIcon = playMode === "shuffle" ? Shuffle : playMode === "single" ? Repeat1 : Repeat;
 
   return (
     <ConfigProvider
@@ -116,6 +123,13 @@ export function PlayerBar({
             >
                <SkipForward className="w-6 h-6" />
             </button>
+            <button
+              onClick={onTogglePlayMode}
+              className="text-slate-400 dark:text-slate-500 active:text-sky-500"
+              title={modeLabel}
+            >
+              <ModeIcon className="w-5 h-5" />
+            </button>
           </div>
 
           {/* Desktop Controls */}
@@ -128,7 +142,7 @@ export function PlayerBar({
               >
                 <SkipBack className="w-5 h-5" />
               </button>
-              
+
               <button 
                 onClick={onPlayPause}
                 className="w-10 h-10 rounded-full bg-sky-500 hover:bg-sky-600 text-white flex items-center justify-center transition-transform active:scale-95 shadow-lg shadow-sky-500/30 dark:shadow-none cursor-pointer"
@@ -142,6 +156,14 @@ export function PlayerBar({
                 className="text-slate-400 dark:text-slate-500 hover:text-sky-500 dark:hover:text-sky-400 transition-colors disabled:opacity-30 cursor-pointer"
               >
                 <SkipForward className="w-5 h-5" />
+              </button>
+
+              <button
+                onClick={onTogglePlayMode}
+                className="text-slate-400 dark:text-slate-500 hover:text-sky-500 dark:hover:text-sky-400 transition-colors cursor-pointer"
+                title={modeLabel}
+              >
+                <ModeIcon className="w-5 h-5" />
               </button>
             </div>
             
