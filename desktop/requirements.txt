@@ -4,6 +4,7 @@ PyQt5-sip
 PyQt-Fluent-Widgets[full]
 PyQt5-Frameless-Window
 beautifulsoup4
+pycryptodome
 nuitka
 ordered-set
 requests

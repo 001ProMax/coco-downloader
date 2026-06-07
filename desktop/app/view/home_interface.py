@@ -3,37 +3,66 @@ from PyQt5.QtCore import QThread, Qt, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QLabel, QWidget, QVBoxLayout
 
-from qfluentwidgets import ScrollArea, isDarkTheme, setFont
+from qfluentwidgets import InfoBar, InfoBarPosition, ScrollArea, setFont
 
-from ..common.config import cfg
 from ..common.style_sheet import StyleSheet
 from ..components import SearchCard, PlaceholderWidget, SongListWidget, SongInfo
 from ..models.music import MusicItem
+from ..services.errors import (
+    NETWORK_ERROR_HTTP_STATUS,
+    NETWORK_ERROR_REDIRECT,
+    NETWORK_ERROR_TIMEOUT,
+    ProviderNetworkError,
+)
 from ..services.music_search_service import search_music
+
+PAGE_SIZE = 20
+PAGED_PLATFORMS = {"网易云官方", "QQ音乐官方", "netease-official", "qq-official"}
 
 
 class MusicSearchThread(QThread):
     """Search music without blocking the UI thread."""
 
-    searchFinished = pyqtSignal(str, str, int, list)
-    searchFailed = pyqtSignal(str, str, int, str)
+    searchFinished = pyqtSignal(str, str, int, int, list)
+    searchFailed = pyqtSignal(str, str, int, int, str, str)
 
-    def __init__(self, keyword: str, platform: str, request_id: int, parent=None):
+    def __init__(
+            self,
+            keyword: str,
+            platform: str,
+            request_id: int,
+            limit: int = PAGE_SIZE,
+            offset: int = 0,
+            parent=None,
+    ):
         super().__init__(parent)
         self.keyword = keyword
         self.platform = platform
         self.request_id = request_id
+        self.limit = limit
+        self.offset = offset
 
     def run(self):
         try:
-            items = search_music(self.keyword, self.platform)
-            self.searchFinished.emit(self.keyword, self.platform, self.request_id, items)
+            items = search_music(self.keyword, self.platform, limit=self.limit, offset=self.offset)
+            self.searchFinished.emit(self.keyword, self.platform, self.request_id, self.offset, items)
+        except ProviderNetworkError as error:
+            self.searchFailed.emit(
+                self.keyword,
+                self.platform,
+                self.request_id,
+                self.offset,
+                str(error),
+                error.kind,
+            )
         except Exception as error:
             self.searchFailed.emit(
                 self.keyword,
                 self.platform,
                 self.request_id,
+                self.offset,
                 str(error),
+                "",
             )
 
 
@@ -51,6 +80,10 @@ class HomeInterface(ScrollArea):
         self.songListWidget = None
         self.searchThread = None
         self.searchRequestId = 0
+        self.currentKeyword = ""
+        self.currentPlatform = ""
+        self.currentOffset = 0
+        self.isLoadingMore = False
 
         self._init_widget()
         self._connect_signals()
@@ -88,15 +121,18 @@ class HomeInterface(ScrollArea):
         """Handle search request"""
         self.searchRequestId += 1
         request_id = self.searchRequestId
-        self.placeholderWidget.hide()
-        self.resultTitleLabel.setText(
-            self.tr('"{keyword}" 的搜索结果').format(keyword=keyword)
-        )
-        self.resultTitleLabel.show()
-        self.searchCard.setEnabled(False)
-        self._show_placeholder(self.tr("正在搜索音乐"), self.tr("正在从 {platform} 获取结果...").format(platform=platform))
+        self.currentKeyword = keyword
+        self.currentPlatform = platform
+        self.currentOffset = 0
+        self.isLoadingMore = False
+        self.placeholderWidget.set_content_visible(False)
+        self.placeholderWidget.show()
+        self.resultTitleLabel.hide()
+        self.searchCard.set_controls_enabled(False)
+        self.searchCard.set_searching(True)
+        self._clear_song_list()
 
-        thread = MusicSearchThread(keyword, platform, request_id, self)
+        thread = MusicSearchThread(keyword, platform, request_id, PAGE_SIZE, 0, self)
         thread.searchFinished.connect(self._on_search_finished)
         thread.searchFailed.connect(self._on_search_failed)
         thread.finished.connect(thread.deleteLater)
@@ -108,13 +144,20 @@ class HomeInterface(ScrollArea):
             keyword: str,
             platform: str,
             request_id: int,
+            offset: int,
             items: list[MusicItem],
     ):
         """Render search results"""
         if request_id != self.searchRequestId:
             return
 
-        self.searchCard.setEnabled(True)
+        self.searchCard.set_controls_enabled(True)
+        self.searchCard.set_searching(False)
+        self.isLoadingMore = False
+        if offset > 0:
+            self._append_more_results(items)
+            return
+
         if not items:
             self._clear_song_list()
             self._show_placeholder(
@@ -123,17 +166,40 @@ class HomeInterface(ScrollArea):
             )
             return
 
+        self.resultTitleLabel.setText(
+            self.tr('"{keyword}" 的搜索结果').format(keyword=keyword)
+        )
+        self.resultTitleLabel.show()
         songs = [self._to_song_info(item) for item in items]
         self.placeholderWidget.hide()
         self._set_song_list(songs)
+        self.currentOffset = len(items)
+        self._set_load_more_visible(self._supports_paging(platform) and len(items) == PAGE_SIZE)
 
-    def _on_search_failed(self, keyword: str, platform: str, request_id: int, message: str):
+    def _on_search_failed(
+            self,
+            keyword: str,
+            platform: str,
+            request_id: int,
+            offset: int,
+            message: str,
+            error_kind: str,
+    ):
         """Render search failure state"""
         if request_id != self.searchRequestId:
             return
 
-        self.searchCard.setEnabled(True)
+        self.searchCard.set_controls_enabled(True)
+        self.searchCard.set_searching(False)
+        self.isLoadingMore = False
+        self._show_search_error_info_bar(message, error_kind)
+        if offset > 0:
+            if self.songListWidget is not None:
+                self.songListWidget.set_loading_more(False)
+            return
+
         self._clear_song_list()
+        self.resultTitleLabel.hide()
         self._show_placeholder(
             self.tr("搜索失败"),
             self.tr("{platform} 请求失败：{message}").format(
@@ -146,6 +212,7 @@ class HomeInterface(ScrollArea):
         """Create or update song list widget"""
         if self.songListWidget is None:
             self.songListWidget = SongListWidget(songs, self.scrollWidget)
+            self.songListWidget.loadMoreRequested.connect(self._on_load_more)
             self.vBoxLayout.addWidget(self.songListWidget, 1)
         else:
             self.songListWidget.set_songs(songs)
@@ -158,6 +225,7 @@ class HomeInterface(ScrollArea):
 
     def _show_placeholder(self, title: str, description: str):
         """Show placeholder with custom text"""
+        self.placeholderWidget.set_content_visible(True)
         self.placeholderWidget.titleLabel.setText(title)
         self.placeholderWidget.descLabel.setText(description)
         self.placeholderWidget.show()
@@ -178,3 +246,85 @@ class HomeInterface(ScrollArea):
         if duration.startswith("00:") and len(duration.split(":")) == 3:
             return duration[3:]
         return duration
+
+    def _on_load_more(self):
+        """Load next page for providers that support paging"""
+        if self.isLoadingMore or not self._supports_paging(self.currentPlatform):
+            return
+        if not self.currentKeyword or self.songListWidget is None:
+            return
+
+        self.isLoadingMore = True
+        self.searchCard.set_controls_enabled(False)
+        self.searchCard.set_searching(True)
+        self.songListWidget.set_loading_more(True)
+
+        thread = MusicSearchThread(
+            self.currentKeyword,
+            self.currentPlatform,
+            self.searchRequestId,
+            PAGE_SIZE,
+            self.currentOffset,
+            self,
+        )
+        thread.searchFinished.connect(self._on_search_finished)
+        thread.searchFailed.connect(self._on_search_failed)
+        thread.finished.connect(thread.deleteLater)
+        self.searchThread = thread
+        thread.start()
+
+    def _append_more_results(self, items: list[MusicItem]) -> None:
+        """Append paged results to the existing song list"""
+        self.searchCard.set_controls_enabled(True)
+        self.searchCard.set_searching(False)
+        if self.songListWidget is None:
+            return
+
+        self.songListWidget.set_loading_more(False)
+        if not items:
+            self._set_load_more_visible(False)
+            return
+
+        songs = [self._to_song_info(item) for item in items]
+        self.songListWidget.append_songs(songs)
+        self.currentOffset += len(items)
+        self._set_load_more_visible(len(items) == PAGE_SIZE)
+
+    def _set_load_more_visible(self, visible: bool) -> None:
+        if self.songListWidget is not None:
+            self.songListWidget.set_load_more_visible(visible)
+
+    def _supports_paging(self, platform: str) -> bool:
+        return platform in PAGED_PLATFORMS
+
+    def _show_search_error_info_bar(self, message: str, error_kind: str) -> None:
+        parent = self.window()
+        if error_kind == NETWORK_ERROR_TIMEOUT:
+            InfoBar.warning(
+                title=self.tr("请求超时"),
+                content=message or self.tr("网络请求超时，请稍后重试"),
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=parent,
+            )
+            return
+
+        if error_kind == NETWORK_ERROR_REDIRECT:
+            title = self.tr("请求异常")
+        elif error_kind == NETWORK_ERROR_HTTP_STATUS:
+            title = self.tr("服务异常")
+        else:
+            title = self.tr("网络错误")
+
+        content = message or self.tr("请求失败，请稍后重试")
+        InfoBar.error(
+            title=title,
+            content=content,
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=parent,
+        )

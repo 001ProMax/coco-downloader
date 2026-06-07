@@ -32,7 +32,7 @@ class QQMp3Provider(MusicProvider):
         self.name = name
         self._http = ProviderHttpClient()
 
-    def search(self, query: str) -> list[MusicItem]:
+    def search(self, query: str, limit: int = 20, offset: int = 0) -> list[MusicItem]:
         try:
             data = self._http.get_json(
                 "https://api.qqmp3.vip/api/songs.php",

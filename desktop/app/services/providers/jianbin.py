@@ -31,7 +31,7 @@ class JianbinProvider(MusicProvider):
         self._source = source
         self._http = ProviderHttpClient()
 
-    def search(self, query: str) -> list[MusicItem]:
+    def search(self, query: str, limit: int = 20, offset: int = 0) -> list[MusicItem]:
         try:
             response_text = self._http.post_text(
                 BASE_URL,

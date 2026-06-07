@@ -3,7 +3,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 
-from qfluentwidgets import SimpleCardWidget, SearchLineEdit, ComboBox, setFont
+from qfluentwidgets import ComboBox, IndeterminateProgressBar, SearchLineEdit, SimpleCardWidget, setFont
 
 
 class SearchCard(SimpleCardWidget):
@@ -13,7 +13,7 @@ class SearchCard(SimpleCardWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(200)
+        self.setFixedHeight(220)
 
         self.vBoxLayout = QVBoxLayout(self)
         self.titleLabel = QLabel(self.tr("发现你的音乐世界"), self)
@@ -25,6 +25,7 @@ class SearchCard(SimpleCardWidget):
         self.searchLayout = QHBoxLayout()
         self.searchInput = SearchLineEdit(self)
         self.platformComboBox = ComboBox(self)
+        self.progressBar = IndeterminateProgressBar(self)
 
         self._init_ui()
         self._connect_signals()
@@ -45,19 +46,18 @@ class SearchCard(SimpleCardWidget):
         self.platformComboBox.setFixedWidth(150)
         self.platformComboBox.setFixedHeight(40)
         self.platformComboBox.addItems([
+            self.tr("网易云官方"),
+            self.tr("QQ音乐官方"),
             self.tr("歌曲宝"),
             self.tr("歌曲海"),
             self.tr("布谷"),
             self.tr("波点"),
-            self.tr("QQ音乐"),
             self.tr("QQ音乐(MP3)"),
             self.tr("米兔"),
             self.tr("JOOX"),
             self.tr("咪咕"),
             self.tr("力音"),
             self.tr("爱听"),
-            self.tr("煎饼-网易云"),
-            self.tr("煎饼-QQ"),
             self.tr("煎饼-酷狗"),
             self.tr("煎饼-酷我"),
         ])
@@ -67,12 +67,16 @@ class SearchCard(SimpleCardWidget):
         self.searchLayout.addWidget(self.searchInput, 1)
         self.searchLayout.addWidget(self.platformComboBox)
 
+        self.progressBar.hide()
+        self.progressBar.pause()
+
         self.vBoxLayout.setContentsMargins(24, 24, 24, 24)
         self.vBoxLayout.setSpacing(12)
         self.vBoxLayout.addWidget(self.titleLabel)
         self.vBoxLayout.addWidget(self.descLabel)
         self.vBoxLayout.addSpacing(8)
         self.vBoxLayout.addLayout(self.searchLayout)
+        self.vBoxLayout.addWidget(self.progressBar)
 
     def _connect_signals(self):
         pass
@@ -86,3 +90,16 @@ class SearchCard(SimpleCardWidget):
     def clear_search(self):
         """Clear search input"""
         self.searchInput.clear()
+
+    def set_searching(self, searching: bool) -> None:
+        """Show or hide the indeterminate search progress bar"""
+        self.progressBar.setVisible(searching)
+        if searching:
+            self.progressBar.resume()
+        else:
+            self.progressBar.pause()
+
+    def set_controls_enabled(self, enabled: bool) -> None:
+        """Enable or disable search controls while keeping status widgets active"""
+        self.searchInput.setEnabled(enabled)
+        self.platformComboBox.setEnabled(enabled)

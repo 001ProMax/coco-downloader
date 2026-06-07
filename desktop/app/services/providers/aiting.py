@@ -58,7 +58,7 @@ class AitingProvider(MusicProvider):
     def __init__(self) -> None:
         self._http = ProviderHttpClient()
 
-    def search(self, query: str) -> list[MusicItem]:
+    def search(self, query: str, limit: int = 20, offset: int = 0) -> list[MusicItem]:
         try:
             cookie = self._bootstrap_cookie()
             html = self._http.get_text(

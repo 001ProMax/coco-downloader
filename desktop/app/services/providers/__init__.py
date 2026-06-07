@@ -9,7 +9,9 @@ from .jianbin import JianbinProvider
 from .joox import JooxProvider
 from .livepoo import LivepooProvider
 from .migu import MiguProvider
+from .netease_official import NeteaseOfficialProvider
 from .qq import QQProvider
+from .qq_official import QQOfficialProvider
 from .qqmp3 import QQMp3Provider
 
 PROVIDERS: dict[str, MusicProvider] = {
@@ -18,10 +20,12 @@ PROVIDERS: dict[str, MusicProvider] = {
     "bugu": BuguProvider(),
     "bodian": BodianProvider(),
     "qq": QQProvider(),
+    "qq-official": QQOfficialProvider(),
     "qqmp3": QQMp3Provider(),
     "mitu": QQMp3Provider("mitu"),
     "joox": JooxProvider(),
     "migu": MiguProvider(),
+    "netease-official": NeteaseOfficialProvider(),
     "livepoo": LivepooProvider(),
     "aiting": AitingProvider(),
     "jianbin-netease": JianbinProvider("jianbin-netease", "netease"),
@@ -36,10 +40,12 @@ PROVIDER_DISPLAY_NAMES = {
     "布谷": "bugu",
     "波点": "bodian",
     "QQ音乐": "qq",
+    "QQ音乐官方": "qq-official",
     "QQ音乐(MP3)": "qqmp3",
     "米兔": "mitu",
     "JOOX": "joox",
     "咪咕": "migu",
+    "网易云官方": "netease-official",
     "力音": "livepoo",
     "爱听": "aiting",
     "煎饼-网易云": "jianbin-netease",

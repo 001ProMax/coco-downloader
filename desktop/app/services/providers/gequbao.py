@@ -122,7 +122,7 @@ class GequbaoProvider(MusicProvider):
     def __init__(self) -> None:
         self._http = ProviderHttpClient()
 
-    def search(self, query: str) -> list[MusicItem]:
+    def search(self, query: str, limit: int = 20, offset: int = 0) -> list[MusicItem]:
         try:
             html = self._http.get_text(
                 f"https://www.gequbao.com/s/{quote_id(query)}",

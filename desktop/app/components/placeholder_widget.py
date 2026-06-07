@@ -44,3 +44,9 @@ class PlaceholderWidget(SimpleCardWidget):
         self.vBoxLayout.addWidget(self.titleLabel, 0, Qt.AlignCenter)
         self.vBoxLayout.addWidget(self.descLabel, 0, Qt.AlignCenter)
         self.vBoxLayout.addStretch(1)
+
+    def set_content_visible(self, visible: bool) -> None:
+        """Show or hide illustration and description content."""
+        self.svgWidget.setVisible(visible)
+        self.titleLabel.setVisible(visible)
+        self.descLabel.setVisible(visible)

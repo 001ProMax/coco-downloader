@@ -9,7 +9,7 @@ class MusicProvider(ABC):
     name: str
 
     @abstractmethod
-    def search(self, query: str) -> list[MusicItem]:
+    def search(self, query: str, limit: int = 20, offset: int = 0) -> list[MusicItem]:
         raise NotImplementedError
 
     @abstractmethod

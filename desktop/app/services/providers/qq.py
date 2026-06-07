@@ -32,7 +32,7 @@ class QQProvider(MusicProvider):
     def __init__(self) -> None:
         self._http = ProviderHttpClient()
 
-    def search(self, query: str) -> list[MusicItem]:
+    def search(self, query: str, limit: int = 20, offset: int = 0) -> list[MusicItem]:
         try:
             data = self._http.get_json(
                 "https://api.vkeys.cn/v2/music/tencent/search/song",

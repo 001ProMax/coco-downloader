@@ -2,20 +2,22 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from PyQt5.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QSize, Qt
+from PyQt5.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QSize, Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QFontMetrics, QIcon
 from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtWidgets import (
     QCheckBox,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
-from qfluentwidgets import isDarkTheme
+from qfluentwidgets import PushButton, isDarkTheme
 
 from ..common.config import cfg
 from ..common.style_sheet import StyleSheet
@@ -455,8 +457,16 @@ class SongRow(QWidget):
 class SongListWidget(QListWidget):
     """Song list widget"""
 
+    loadMoreRequested = pyqtSignal()
+
     def __init__(self, songs: list[SongInfo] | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._song_count = 0
+        self._has_load_more = False
+        self._is_loading_more = False
+        self._load_more_item: QListWidgetItem | None = None
+        self._load_more_button: PushButton | None = None
+
         self.setObjectName("songListWidget")
         self.setAlternatingRowColors(True)
         self.setFrameShape(QFrame.NoFrame)
@@ -472,17 +482,46 @@ class SongListWidget(QListWidget):
     def set_songs(self, songs: list[SongInfo]) -> None:
         """Set song list"""
         self.clear()
+        self._song_count = 0
+        self._load_more_item = None
+        self._load_more_button = None
         for song in songs:
-            item = QListWidgetItem(self)
-            item.setSizeHint(QSize(1090, 60))
-            row = SongRow(song, self)
-            self.addItem(item)
-            self.setItemWidget(item, row)
+            self._add_song_row(song)
 
-        total_height = len(songs) * 60
-        self.setMinimumHeight(total_height)
-        self.setMaximumHeight(total_height)
+        if self._has_load_more:
+            self._add_load_more_row()
+        self._sync_height()
         self._sync_row_sizes()
+
+    def append_songs(self, songs: list[SongInfo]) -> None:
+        """Append songs before the load-more row"""
+        self._remove_load_more_row()
+        for song in songs:
+            self._add_song_row(song)
+
+        if self._has_load_more:
+            self._add_load_more_row()
+        self._sync_height()
+        self._sync_row_sizes()
+
+    def set_load_more_visible(self, visible: bool) -> None:
+        """Show or hide load more row"""
+        if self._has_load_more == visible:
+            self._sync_load_more_state()
+            return
+
+        self._has_load_more = visible
+        if visible:
+            self._add_load_more_row()
+        else:
+            self._remove_load_more_row()
+        self._sync_height()
+        self._sync_row_sizes()
+
+    def set_loading_more(self, loading: bool) -> None:
+        """Set load more button state"""
+        self._is_loading_more = loading
+        self._sync_load_more_state()
 
     def resizeEvent(self, event) -> None:
         """Handle resize event"""
@@ -498,5 +537,63 @@ class SongListWidget(QListWidget):
             row = self.itemWidget(item)
             if row is None:
                 continue
-            item.setSizeHint(QSize(width, 60))
-            row.resize(width, 60)
+            height = 64 if item is self._load_more_item else 60
+            item.setSizeHint(QSize(width, height))
+            row.resize(width, height)
+
+    def _add_song_row(self, song: SongInfo) -> None:
+        item = QListWidgetItem(self)
+        item.setSizeHint(QSize(1090, 60))
+        row = SongRow(song, self)
+        self.addItem(item)
+        self.setItemWidget(item, row)
+        self._song_count += 1
+
+    def _add_load_more_row(self) -> None:
+        if self._load_more_item is not None:
+            return
+
+        item = QListWidgetItem(self)
+        item.setSizeHint(QSize(1090, 64))
+        row = QWidget(self)
+        layout = QVBoxLayout(row)
+        button_layout = QHBoxLayout()
+        button = PushButton(self.tr("加载更多"), row)
+
+        button.setFixedHeight(36)
+        button.clicked.connect(self.loadMoreRequested)
+        button_layout.addStretch(1)
+        button_layout.addWidget(button)
+        button_layout.addStretch(1)
+        layout.setContentsMargins(0, 12, 0, 12)
+        layout.addLayout(button_layout)
+
+        self.addItem(item)
+        self.setItemWidget(item, row)
+        self._load_more_item = item
+        self._load_more_button = button
+        self._sync_load_more_state()
+
+    def _remove_load_more_row(self) -> None:
+        if self._load_more_item is None:
+            return
+
+        row = self.row(self._load_more_item)
+        if row >= 0:
+            self.takeItem(row)
+        self._load_more_item = None
+        self._load_more_button = None
+
+    def _sync_load_more_state(self) -> None:
+        if self._load_more_button is None:
+            return
+
+        self._load_more_button.setEnabled(not self._is_loading_more)
+        text = self.tr("正在加载...") if self._is_loading_more else self.tr("加载更多")
+        self._load_more_button.setText(text)
+
+    def _sync_height(self) -> None:
+        footer_height = 64 if self._has_load_more else 0
+        total_height = self._song_count * 60 + footer_height
+        self.setMinimumHeight(total_height)
+        self.setMaximumHeight(total_height)
