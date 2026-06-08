@@ -1,8 +1,8 @@
 # coding:utf-8
-from qfluentwidgets import (SwitchSettingCard, FolderListSettingCard,
+from qfluentwidgets import (SwitchSettingCard,
                             OptionsSettingCard, PushSettingCard,
                             HyperlinkCard, PrimaryPushSettingCard, ScrollArea,
-                            ComboBoxSettingCard, ExpandLayout, Theme, CustomColorSettingCard,
+                            ComboBoxSettingCard, ExpandLayout,
                             setTheme, setThemeColor, isDarkTheme, setFont)
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import SettingCardGroup as CardGroup
@@ -46,14 +46,14 @@ class SettingInterface(ScrollArea):
             cfg.micaEnabled,
             self.personalGroup
         )
-        self.themeCard = ComboBoxSettingCard(
+        self.themeCard = OptionsSettingCard(
             cfg.themeMode,
             FIF.BRUSH,
-            self.tr('Application theme'),
-            self.tr("Change the appearance of your application"),
+            self.tr('应用主题'),
+            self.tr("切换应用的明暗外观"),
             texts=[
-                self.tr('Light'), self.tr('Dark'),
-                self.tr('Use system setting')
+                self.tr('浅色'), self.tr('深色'),
+                self.tr('跟随系统')
             ],
             parent=self.personalGroup
         )
@@ -75,6 +75,29 @@ class SettingInterface(ScrollArea):
             self.tr('Set your preferred language for UI'),
             texts=['简体中文', '繁體中文', 'English', self.tr('Use system setting')],
             parent=self.personalGroup
+        )
+
+        # download
+        self.downloadGroup = SettingCardGroup(self.tr("下载设置"), self.scrollWidget)
+        self.downloadFolderCard = PushSettingCard(
+            self.tr("选择文件夹"),
+            FIF.DOWNLOAD,
+            self.tr("默认下载位置"),
+            cfg.get(cfg.downloadFolder),
+            self.downloadGroup,
+        )
+        self.filenameRuleCard = OptionsSettingCard(
+            cfg.downloadFilenameRule,
+            FIF.DOCUMENT,
+            self.tr("命名规则"),
+            self.tr("选择下载歌曲保存时的文件命名方式"),
+            texts=[
+                self.tr("歌名 - 歌手"),
+                self.tr("歌名"),
+                self.tr("歌名 - ID"),
+                self.tr("歌手 - 歌名"),
+            ],
+            parent=self.downloadGroup,
         )
 
         # update software
@@ -146,6 +169,9 @@ class SettingInterface(ScrollArea):
         self.personalGroup.addSettingCard(self.zoomCard)
         self.personalGroup.addSettingCard(self.languageCard)
 
+        self.downloadGroup.addSettingCard(self.downloadFolderCard)
+        self.downloadGroup.addSettingCard(self.filenameRuleCard)
+
         self.updateSoftwareGroup.addSettingCard(self.updateOnStartUpCard)
 
         self.aboutGroup.addSettingCard(self.helpCard)
@@ -156,6 +182,7 @@ class SettingInterface(ScrollArea):
         self.expandLayout.setSpacing(28)
         self.expandLayout.setContentsMargins(36, 10, 36, 0)
         self.expandLayout.addWidget(self.personalGroup)
+        self.expandLayout.addWidget(self.downloadGroup)
         self.expandLayout.addWidget(self.updateSoftwareGroup)
         self.expandLayout.addWidget(self.aboutGroup)
 
@@ -175,6 +202,7 @@ class SettingInterface(ScrollArea):
         # personalization
         cfg.themeChanged.connect(setTheme)
         self.micaCard.checkedChanged.connect(signalBus.micaEnableChanged)
+        self.downloadFolderCard.clicked.connect(self._onDownloadFolderCardClicked)
 
         # check update
         self.aboutCard.clicked.connect(signalBus.checkUpdateSig)
@@ -182,3 +210,16 @@ class SettingInterface(ScrollArea):
         # about
         self.feedbackCard.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl(FEEDBACK_URL)))
+
+    def _onDownloadFolderCardClicked(self):
+        """Handle download folder selection."""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("选择文件夹"),
+            cfg.get(cfg.downloadFolder),
+        )
+        if not folder or cfg.get(cfg.downloadFolder) == folder:
+            return
+
+        cfg.set(cfg.downloadFolder, folder)
+        self.downloadFolderCard.setContent(folder)

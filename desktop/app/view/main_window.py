@@ -4,7 +4,8 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QFrame, QWidget, QLabel
 
 from qfluentwidgets import (NavigationBar, NavigationItemPosition, SplashScreen, isDarkTheme,
-                            PopUpAniStackedWidget, InfoBar, InfoBarPosition)
+                            PopUpAniStackedWidget, InfoBar, InfoBarIcon, InfoBarPosition,
+                            IndeterminateProgressRing)
 from qfluentwidgets import FluentIcon as FIF
 from qframelesswindow import FramelessWindow, TitleBar
 
@@ -111,6 +112,7 @@ class MainWindow(FramelessWindow):
     def connectSignalToSlot(self):
         signalBus.micaEnableChanged.connect(lambda x: None)
         signalBus.playbackError.connect(self.showPlaybackError)
+        signalBus.downloadStarted.connect(self.showDownloadStarted)
         signalBus.downloadFinished.connect(self.showDownloadFinished)
         signalBus.downloadFailed.connect(self.showDownloadFailed)
         self.stackedWidget.view.currentChanged.connect(self.onCurrentInterfaceChanged)
@@ -202,6 +204,25 @@ class MainWindow(FramelessWindow):
             parent=self,
         )
 
+    def showDownloadStarted(self, song_name: str):
+        ring = IndeterminateProgressRing(self)
+        ring.setFixedSize(18, 18)
+        ring.setStrokeWidth(3)
+
+        bar = InfoBar(
+            InfoBarIcon.INFORMATION,
+            self.tr("正在下载"),
+            song_name or self.tr("正在准备下载任务"),
+            orient=Qt.Horizontal,
+            isClosable=True,
+            duration=2500,
+            position=InfoBarPosition.TOP,
+            parent=self,
+        )
+        bar.iconWidget.hide()
+        bar.hBoxLayout.insertWidget(0, ring, 0, Qt.AlignVCenter)
+        bar.show()
+
     def showDownloadFinished(self, file_path: str):
         InfoBar.success(
             title=self.tr("下载完成"),
@@ -233,6 +254,7 @@ class MainWindow(FramelessWindow):
             stream.setCodec('UTF-8')
             self.setStyleSheet(stream.readAll())
             qss_file.close()
+        self.playerBar.animate_color(self.playerBar.default_color())
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

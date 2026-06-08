@@ -6,13 +6,13 @@ from typing import Any
 import requests
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 
+from app.common.config import DownloadFilenameRule, cfg
 from app.common.signal_bus import signalBus
 from app.models.music import MusicItem, PlayInfo
 from app.services.providers import get_provider
 
 DOWNLOAD_TIMEOUT = 30
 DOWNLOAD_CHUNK_SIZE = 1024 * 256
-DOWNLOAD_DIR = Path.home() / "Downloads" / "CocoDownloader"
 REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -57,7 +57,8 @@ class DownloadThread(QThread):
             self.failed.emit(str(error) or "下载失败")
 
     def _download(self, play_info: PlayInfo) -> Path:
-        DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        download_dir = Path(cfg.get(cfg.downloadFolder))
+        download_dir.mkdir(parents=True, exist_ok=True)
 
         with requests.get(
             play_info.url,
@@ -69,7 +70,7 @@ class DownloadThread(QThread):
             chunks = response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE)
             first_chunk = next(chunks, b"")
             suffix = self._suffix(play_info, first_chunk)
-            file_path = self._unique_file_path(suffix)
+            file_path = self._unique_file_path(download_dir, suffix)
             with file_path.open("wb") as file:
                 if first_chunk:
                     file.write(first_chunk)
@@ -79,17 +80,27 @@ class DownloadThread(QThread):
 
         return file_path
 
-    def _unique_file_path(self, suffix: str) -> Path:
-        base_name = _safe_filename(f"{self.item.title} - {self.item.artist}")
-        file_path = DOWNLOAD_DIR / f"{base_name}.{suffix}"
+    def _unique_file_path(self, download_dir: Path, suffix: str) -> Path:
+        base_name = _safe_filename(self._filename_stem())
+        file_path = download_dir / f"{base_name}.{suffix}"
         if not file_path.exists():
             return file_path
 
         for index in range(1, 1000):
-            candidate = DOWNLOAD_DIR / f"{base_name} ({index}).{suffix}"
+            candidate = download_dir / f"{base_name} ({index}).{suffix}"
             if not candidate.exists():
                 return candidate
-        return DOWNLOAD_DIR / f"{base_name}.{suffix}"
+        return download_dir / f"{base_name}.{suffix}"
+
+    def _filename_stem(self) -> str:
+        rule = cfg.get(cfg.downloadFilenameRule)
+        if rule == DownloadFilenameRule.TITLE:
+            return self.item.title
+        if rule == DownloadFilenameRule.TITLE_ID:
+            return f"{self.item.title} - {self.item.id}"
+        if rule == DownloadFilenameRule.ARTIST_TITLE:
+            return f"{self.item.artist} - {self.item.title}"
+        return f"{self.item.title} - {self.item.artist}"
 
     def _suffix(self, play_info: PlayInfo, first_chunk: bytes) -> str:
         detected_suffix = self._suffix_from_header(first_chunk)
@@ -128,6 +139,7 @@ class DownloadService(QObject):
         overrides = extra_overrides if isinstance(extra_overrides, dict) else {}
         thread = DownloadThread(item, overrides, self)
         self.threads.add(thread)
+        signalBus.downloadStarted.emit(f"{item.title} - {item.artist}")
         thread.finished.connect(self._on_finished)
         thread.failed.connect(self._on_failed)
         thread.finished.connect(lambda *_: self._remove_thread(thread))

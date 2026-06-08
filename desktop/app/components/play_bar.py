@@ -5,8 +5,10 @@ from enum import Enum
 from PyQt5.QtCore import QPoint, QPropertyAnimation, QRectF, QSize, Qt, pyqtProperty, pyqtSignal
 from PyQt5.QtGui import QBrush, QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap
 from PyQt5.QtWidgets import QLabel, QProxyStyle, QSlider, QToolButton, QWidget
+from qfluentwidgets import isDarkTheme
 
 BAR_COLOR = QColor(42, 119, 159)
+DARK_BAR_COLOR = QColor(32, 32, 32)
 DEFAULT_COVER = ":/app/images/play_bar/album_200_200.png"
 
 
@@ -566,9 +568,10 @@ class PlayBar(QWidget):
         self.song_card.set_default_cover()
 
     def animate_color(self, color: QColor) -> None:
+        target_color = DARK_BAR_COLOR if isDarkTheme() else color
         self.color_animation.stop()
         self.color_animation.setStartValue(self.get_bar_color())
-        self.color_animation.setEndValue(color)
+        self.color_animation.setEndValue(target_color)
         self.color_animation.start()
 
     def resizeEvent(self, event) -> None:
@@ -592,6 +595,8 @@ class PlayBar(QWidget):
         return self._color
 
     def default_color(self) -> QColor:
+        if isDarkTheme():
+            return QColor(DARK_BAR_COLOR)
         return QColor(BAR_COLOR)
 
     def _adjust_widgets(self) -> None:
