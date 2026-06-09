@@ -1,4 +1,6 @@
 # coding: utf-8
+from typing import Any
+
 from PyQt5.QtCore import QThread, Qt, QSize, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import QLabel, QWidget, QVBoxLayout
@@ -9,7 +11,7 @@ from qfluentwidgets import Action, CommandBarView, FluentIcon, InfoBar, InfoBarP
 
 from ..common.style_sheet import StyleSheet
 from ..common.signal_bus import signalBus
-from ..components import NeteaseQualityDialog, PlaceholderWidget, SearchCard, SongInfo, SongListWidget
+from ..components import DownloadOptionDialog, NeteaseQualityDialog, PlaceholderWidget, SearchCard, SongInfo, SongListWidget
 from ..models.music import MusicItem
 from ..services.errors import (
     NETWORK_ERROR_HTTP_STATUS,
@@ -20,9 +22,9 @@ from ..services.errors import (
 from ..services.music_search_service import search_music
 
 PAGE_SIZE = 20
-PAGED_PLATFORMS = {"网易云官方", "QQ音乐官方", "netease-official", "qq-official"}
+PAGED_PLATFORMS = {"网易云音乐", "QQ音乐", "酷狗音乐", "netease-official", "qq-official", "kugou"}
 DOWNLOAD_ONLY_PLATFORMS = {"QQ音乐(MP3)", "力音", "爱听", "qqmp3", "livepoo", "aiting"}
-NETEASE_OFFICIAL_PLATFORMS = {"网易云官方", "netease-official"}
+NETEASE_OFFICIAL_PLATFORMS = {"网易云音乐", "netease-official"}
 
 
 class MusicSearchThread(QThread):
@@ -364,6 +366,13 @@ class HomeInterface(ScrollArea):
                 signalBus.downloadRequested.emit(item, {"level": dialog.selected_level})
             return
 
+        option_overrides = self._select_download_option(item)
+        if option_overrides is None:
+            return
+        if option_overrides:
+            signalBus.downloadRequested.emit(item, option_overrides)
+            return
+
         signalBus.downloadRequested.emit(item, {})
 
     def _download_selected_songs(self) -> None:
@@ -422,6 +431,46 @@ class HomeInterface(ScrollArea):
 
     def _is_netease_official(self, provider: str) -> bool:
         return provider in NETEASE_OFFICIAL_PLATFORMS
+
+    def _select_download_option(self, item: MusicItem) -> dict[str, Any] | None:
+        options = item.extra.get("qualityOptions")
+        if not isinstance(options, list) or not options:
+            return {}
+
+        valid_options = [option for option in options if isinstance(option, dict)]
+        if not valid_options:
+            return {}
+
+        dialog = DownloadOptionDialog(
+            self.tr("选择下载线路"),
+            self.tr("{provider} 支持多个解析线路，请选择本次下载使用的线路。").format(provider=item.provider),
+            valid_options,
+            self._default_download_option_value(item),
+            self.window(),
+        )
+        if not dialog.exec():
+            return None
+
+        selected = dialog.selected_option
+        value = selected.get("value")
+        if not isinstance(value, str) or not value:
+            return {}
+        return {
+            "selectedParser": selected.get("parser") or value,
+            "selectedLevel": selected.get("level"),
+            "selectedFormat": selected.get("format"),
+        }
+
+    def _default_download_option_value(self, item: MusicItem) -> str:
+        selected_option = item.extra.get("selectedOption")
+        if isinstance(selected_option, str) and selected_option:
+            return selected_option
+
+        parser = item.extra.get("selectedParser")
+        level = item.extra.get("selectedLevel")
+        if isinstance(parser, str) and isinstance(level, str) and parser and level:
+            return f"{parser}-{level}"
+        return str(parser or level or "")
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

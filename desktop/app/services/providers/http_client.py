@@ -21,6 +21,7 @@ DEFAULT_TIMEOUT = 15
 class ProviderHttpClient:
     def __init__(self) -> None:
         self._session = requests.Session()
+        self._session.trust_env = False
 
     def get_json(
         self,

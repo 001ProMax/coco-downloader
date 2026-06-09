@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from app.models.music import MusicItem, PlayInfo
+from app.models.music import LyricData, MusicItem, PlayInfo
 
 
 class MusicProvider(ABC):
@@ -15,3 +15,6 @@ class MusicProvider(ABC):
     @abstractmethod
     def get_play_info(self, song_id: str, extra: dict[str, Any] | None = None) -> PlayInfo:
         raise NotImplementedError
+
+    def get_lyric(self, song_id: str, extra: dict[str, Any] | None = None) -> LyricData:
+        raise NotImplementedError(f"{self.name} does not support lyrics")

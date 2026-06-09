@@ -11,15 +11,16 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from requests import RequestException
 
-from app.models.music import MusicItem, PlayInfo
+from app.models.music import LyricData, MusicItem, PlayInfo
 
 from .base import MusicProvider
 from .http_client import ProviderHttpClient
-from .utils import clean_text, extract_ext, is_http_url
+from .utils import clean_text, extract_ext, is_http_url, parse_lrc_lines
 
 LOGGER = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 15
 API_DOMAIN = "https://interface.music.163.com"
+LYRIC_API_URL = "https://interface3.music.163.com/eapi/song/lyric/v1"
 CENGUIGUI_PLAY_API_URL = "https://api-v2.cenguigui.cn/api/netease/music_v1.php"
 METING_API_URL = "https://api.qijieya.cn/meting/"
 EAPI_KEY = b"e82ckenh8dichen8"
@@ -148,6 +149,36 @@ class NeteaseOfficialProvider(MusicProvider):
             cover=info.get("cover") or fallback_cover,
         )
 
+    def get_lyric(self, song_id: str, extra: dict[str, Any] | None = None) -> LyricData:
+        try:
+            numeric_id = int(song_id)
+        except ValueError as error:
+            raise ValueError("Invalid netease song id") from error
+
+        payload = self._make_lyric_request(
+            {
+                "id": numeric_id,
+                "cp": False,
+                "tv": 0,
+                "lv": 0,
+                "rv": 0,
+                "kv": 0,
+                "yv": 0,
+                "ytv": 0,
+                "yrv": 0,
+            }
+        )
+        lyric = self._extract_lyric_text(payload, "lrc")
+        return LyricData(
+            songid=song_id,
+            provider=self.name,
+            lines=parse_lrc_lines(lyric),
+            lrc=lyric,
+            tlyric=self._extract_lyric_text(payload, "tlyric") or None,
+            yrc=self._extract_lyric_text(payload, "yrc") or None,
+            romalrc=self._extract_lyric_text(payload, "romalrc") or None,
+        )
+
     def _make_request(self, uri: str, data: dict[str, Any]) -> Any:
         url = f"{API_DOMAIN}/eapi{uri[4:]}"
         encrypted = _eapi_encrypt(uri, {"header": self._build_request_header(), "e_r": True, **data})
@@ -161,10 +192,40 @@ class NeteaseOfficialProvider(MusicProvider):
             data={"params": encrypted},
             timeout=REQUEST_TIMEOUT,
         )
+        return self._parse_eapi_response(response)
+
+    def _make_lyric_request(self, data: dict[str, Any]) -> Any:
+        uri = "/api/song/lyric/v1"
+        encrypted = _eapi_encrypt(uri, {"header": self._build_request_header(), "e_r": True, **data})
+        response = self._http.post_response(
+            LYRIC_API_URL,
+            headers={
+                "User-Agent": DEFAULT_UA,
+                "Cookie": self._build_cookie_header(),
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data={"params": encrypted},
+            timeout=REQUEST_TIMEOUT,
+        )
+        return self._parse_eapi_response(response)
+
+    def _parse_eapi_response(self, response: Any) -> Any:
         content_type = response.headers.get("content-type", "")
         if "application/json" in content_type:
-            return response.json()
+            try:
+                return response.json()
+            except json.JSONDecodeError:
+                LOGGER.debug("Netease eapi response is encrypted despite json content type")
         return _eapi_decrypt(response.content)
+
+    def _extract_lyric_text(self, payload: Any, key: str) -> str:
+        if not isinstance(payload, dict):
+            return ""
+        lyric_node = payload.get(key)
+        if not isinstance(lyric_node, dict):
+            return ""
+        lyric = lyric_node.get("lyric")
+        return lyric if isinstance(lyric, str) else ""
 
     def _build_request_header(self) -> dict[str, str]:
         return {**DEFAULT_HEADER, "deviceId": self._device_id, "MUSIC_U": ""}

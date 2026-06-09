@@ -1,18 +1,25 @@
 # coding: utf-8
+import base64
 import logging
+import random
 from typing import Any
 
 from requests import RequestException
 
-from app.models.music import MusicItem, PlayInfo
+from app.services.errors import ProviderNetworkError
+from app.models.music import LyricData, MusicItem, PlayInfo
 
 from .base import MusicProvider
 from .http_client import ProviderHttpClient
-from .qq import QQProvider
+from .utils import extract_ext, is_http_url, parse_lrc_lines
 
 LOGGER = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 15
 SEARCH_URL = "http://u6.y.qq.com/cgi-bin/musicu.fcg"
+LYRIC_URL = "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg"
+VKEYS_URL = "https://api.vkeys.cn/v2/music/tencent/geturl"
+XCVTS_URL = "https://api.xcvts.cn/api/music/qq"
+CYAPI_URL = "https://cyapi.top/API/qq_music.php"
 SEARCH_HEADERS = {
     "Content-Type": "application/json",
     "User-Agent": (
@@ -21,6 +28,20 @@ SEARCH_HEADERS = {
         "Mobile/15E148 Safari/604.1 Edg/131.0.0.0"
     ),
 }
+VKEYS_QUALITY_PRIORITY = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+XCVTS_QUALITIES = ["臻品母带", "臻品全景声", "臻品2.0", "SQ无损", "HQ高品质", "中品质", "普通", "低品质", "试听"]
+XCVTS_KEYS = [
+    "Nzg5OTMzNDRiOWJmMTEwNTY1NTU5OTAwOWNkYmEzZDI=",
+    "Y2U3NzhlYjBkMTg1OGVkZmI0YjIwNzFhMTE1ZjFlZGY=",
+]
+CYAPI_KEYS = [
+    "1ffdf5733f5d538760e63d7e46ba17438d9f7b9dfc18c51be1109386fd74c3a1",
+    "2baf39266d8ef0580aba937245d5bb569fe376f230ff508f1faa0922dc320fe4",
+]
+QQ_DOWNLOAD_OPTIONS = [
+    {"value": "xcvts", "label": "XCVTS 高品质", "quality": "flac", "format": "flac"},
+    {"value": "cyapi", "label": "CYAPI 备用", "quality": "mp3", "format": "mp3"},
+]
 
 
 def _normalize_limit(limit: int) -> int:
@@ -54,7 +75,6 @@ class QQOfficialProvider(MusicProvider):
 
     def __init__(self) -> None:
         self._http = ProviderHttpClient()
-        self._qq_provider = QQProvider()
 
     def search(self, query: str, limit: int = 20, offset: int = 0) -> list[MusicItem]:
         page_size = _normalize_limit(limit)
@@ -84,8 +104,31 @@ class QQOfficialProvider(MusicProvider):
 
     def get_play_info(self, song_id: str, extra: dict[str, Any] | None = None) -> PlayInfo:
         context = extra or {}
-        play_info = self._resolve_with_qq(song_id, context)
+        play_info = self._resolve_play_info(song_id, context)
         return self._complete_play_info(play_info, context)
+
+    def get_lyric(self, song_id: str, extra: dict[str, Any] | None = None) -> LyricData:
+        data = self._http.get_json(
+            LYRIC_URL,
+            headers={
+                "Referer": "https://y.qq.com/portal/player.html",
+                "User-Agent": SEARCH_HEADERS["User-Agent"],
+            },
+            params={
+                "songmid": song_id,
+                "g_tk": "5381",
+                "loginUin": "0",
+                "hostUin": "0",
+                "format": "json",
+                "inCharset": "utf8",
+                "outCharset": "utf-8",
+                "platform": "yqq",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        encoded = data.get("lyric", "") if isinstance(data, dict) else ""
+        lyric = _decode_base64(encoded) if isinstance(encoded, str) and encoded else ""
+        return LyricData(songid=song_id, provider=self.name, lines=parse_lrc_lines(lyric), lrc=lyric)
 
     def _build_payload(self, query: str, limit: int, page_num: int) -> dict[str, Any]:
         return {
@@ -152,6 +195,9 @@ class QQOfficialProvider(MusicProvider):
         extra = {
             "title": song.get("name") or "",
             "artist": _join_singers(song.get("singer")),
+            "selectedParser": "xcvts",
+            "selectedFormat": "flac",
+            "qualityOptions": QQ_DOWNLOAD_OPTIONS,
         }
         if isinstance(song_mid, str) and song_mid:
             extra["mid"] = song_mid
@@ -159,11 +205,41 @@ class QQOfficialProvider(MusicProvider):
             extra["cover"] = cover
         return extra
 
-    def _resolve_with_qq(self, song_id: str, extra: dict[str, Any]) -> PlayInfo:
+    def _resolve_play_info(self, song_id: str, extra: dict[str, Any]) -> PlayInfo:
         mid = str(extra.get("mid") or song_id).strip()
         if not mid:
             raise ValueError("缺少 QQ 音乐 mid")
-        return self._qq_provider.get_play_info(mid, extra)
+        if extra.get("usage") == "playback":
+            return self._resolve_playback_info(mid)
+
+        selected_parser = str(extra.get("selectedParser") or "").strip()
+        if selected_parser == "xcvts":
+            return self._get_by_xcvts(mid)
+        if selected_parser == "cyapi":
+            return self._get_by_cyapi(mid)
+
+        for parser_name, resolver in (
+            ("xcvts", self._get_by_xcvts),
+            ("cyapi", self._get_by_cyapi),
+            ("vkeys", self._get_by_vkeys),
+        ):
+            try:
+                return resolver(mid)
+            except (ProviderNetworkError, RequestException, ValueError):
+                LOGGER.warning("QQ official %s parser fallback failed", parser_name, exc_info=True)
+        raise ValueError("Failed to get QQ play url")
+
+    def _resolve_playback_info(self, song_id: str) -> PlayInfo:
+        for parser_name, resolver in (
+            ("cyapi", self._get_by_cyapi),
+            ("xcvts-playback", self._get_by_xcvts_playback),
+            ("vkeys", self._get_by_vkeys),
+        ):
+            try:
+                return resolver(song_id)
+            except (ProviderNetworkError, RequestException, ValueError):
+                LOGGER.warning("QQ official playback %s parser failed", parser_name, exc_info=True)
+        raise ValueError("Failed to get QQ playback url")
 
     def _complete_play_info(self, play_info: PlayInfo, extra: dict[str, Any]) -> PlayInfo:
         if play_info.cover:
@@ -175,3 +251,80 @@ class QQOfficialProvider(MusicProvider):
             cover=str(extra.get("cover") or "") or None,
             headers=play_info.headers,
         )
+
+    def _get_by_xcvts(self, song_id: str) -> PlayInfo:
+        return self._get_by_xcvts_quality(song_id, XCVTS_QUALITIES)
+
+    def _get_by_xcvts_playback(self, song_id: str) -> PlayInfo:
+        return self._get_by_xcvts_quality(song_id, ["普通", "低品质", "试听"])
+
+    def _get_by_xcvts_quality(self, song_id: str, qualities: list[str]) -> PlayInfo:
+        api_key = _decode_base64(random.choice(XCVTS_KEYS))
+        for quality in qualities:
+            data = self._http.get_json(
+                XCVTS_URL,
+                headers={"User-Agent": SEARCH_HEADERS["User-Agent"]},
+                params={"apiKey": api_key, "mid": song_id, "type": quality},
+                timeout=REQUEST_TIMEOUT,
+            )
+            payload = data.get("data", {}) if isinstance(data, dict) else {}
+            url = str(payload.get("music") or "").strip() if isinstance(payload, dict) else ""
+            if is_http_url(url):
+                cover = payload.get("cover") if isinstance(payload.get("cover"), str) else None
+                return PlayInfo(url=url, type=extract_ext(url), bitrate=quality, cover=cover)
+        raise ValueError("Failed to get xcvts url")
+
+    def _get_by_cyapi(self, song_id: str) -> PlayInfo:
+        data = self._http.get_json(
+            CYAPI_URL,
+            headers={"User-Agent": SEARCH_HEADERS["User-Agent"]},
+            params={
+                "apikey": random.choice(CYAPI_KEYS),
+                "type": "json",
+                "mid": song_id,
+                "quality": "lossless",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        url = str(data.get("url") or "").strip() if isinstance(data, dict) else ""
+        if not is_http_url(url):
+            raise ValueError("Failed to get cyapi url")
+
+        cover_data = data.get("cover") if isinstance(data, dict) else None
+        cover = cover_data.get("large") if isinstance(cover_data, dict) else cover_data
+        return PlayInfo(
+            url=url,
+            type=extract_ext(url),
+            bitrate="lossless",
+            cover=cover if isinstance(cover, str) else None,
+        )
+
+    def _get_by_vkeys(self, song_id: str) -> PlayInfo:
+        for quality in VKEYS_QUALITY_PRIORITY:
+            data = self._http.get_json(
+                VKEYS_URL,
+                headers=SEARCH_HEADERS,
+                params={"mid": song_id, "quality": quality},
+                timeout=REQUEST_TIMEOUT,
+            )
+            if not isinstance(data, dict) or data.get("code") != 200:
+                continue
+            payload = data.get("data", {})
+            if not isinstance(payload, dict):
+                continue
+            url = payload.get("url")
+            if is_http_url(url):
+                return PlayInfo(
+                    url=url,
+                    type=extract_ext(url),
+                    bitrate=payload.get("kbps") or payload.get("quality"),
+                    cover=payload.get("cover") if isinstance(payload.get("cover"), str) else None,
+                )
+        raise ValueError("Failed to get vkeys url")
+
+
+def _decode_base64(value: str) -> str:
+    try:
+        return base64.b64decode(value).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return ""

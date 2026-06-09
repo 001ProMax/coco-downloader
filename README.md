@@ -167,16 +167,18 @@ desktop/CoCo-downloader-setup.iss
 项目内聚合了多个第三方音乐搜索与解析来源。当前代码中包含的 provider 主要包括：
 
 - 爱听
-- 波点
-- 布谷
+- 波点音乐
+- 布谷音乐
 - 歌曲宝
 - 歌曲海
-- 煎饼系列
+- 煎饼音乐系列（支持酷狗，网易云，QQ解析）
 - JOOX
+- 米兔音乐
 - LivePoo
-- 咪咕
-- 网易相关能力
-- QQ / QQ 官方 / QQMP3
+- 咪咕音乐
+- 网易云音乐
+- 酷狗音乐
+- QQ音乐 / QQMP3
 
 不同音源的可用性、音质和返回字段会随第三方站点变化而变化。项目通过 provider 层隔离这些差异，尽量把上层 UI 和 API 保持稳定。
 
@@ -202,30 +204,12 @@ desktop/CoCo-downloader-setup.iss
 - Nuitka
 - Inno Setup
 
-## 设计取舍
-
-### 为什么同时保留 Web 和桌面端
-
-两端面向的使用场景不同：
-
-- Web 应用适合随开随用，部署成本低。
-- 桌面端适合本地任务管理、原生窗口体验和下载工作流。
-
-它们共享相同的问题域，但不强行共享同一套运行时。这样可以让每一端按照自己的平台习惯演进。
-
-### 为什么桌面端使用 Qt 资源系统
-
-桌面端图片、qss、翻译文件都通过 `resource.qrc` 编译到 `resource.py`，运行时使用 `:/app/...` 路径引用。这样打包后资源不依赖工作目录，也更适合 Nuitka standalone 分发。
-
-### 为什么配置写入 AppData
-
-安装目录在 Windows 上经常位于 `Program Files`，普通用户不一定有写权限。把配置写入用户 AppData 可以避免权限问题，也符合桌面应用习惯。
 
 ## 致谢
 
 桌面端界面基于 [QFluentWidgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets) 构建。QFluentWidgets 为 PyQt/PySide 提供了 Fluent Design 风格的组件、设置卡片、导航、主题和图标体系，让桌面端能够以较低成本获得现代化的 Windows 应用体验。
 
-同时感谢 PyQt、Next.js、React、Tailwind CSS、Nuitka、Inno Setup 等开源项目。
+感谢LINUXDO社区提供的帮助：https://linux.do/
 
 ## 免责声明
 

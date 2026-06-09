@@ -22,3 +22,20 @@ class PlayInfo:
     bitrate: str | None = None
     cover: str | None = None
     headers: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class LyricLine:
+    time: float
+    text: str
+
+
+@dataclass(frozen=True)
+class LyricData:
+    songid: str
+    provider: str
+    lines: list[LyricLine]
+    lrc: str
+    tlyric: str | None = None
+    yrc: str | None = None
+    romalrc: str | None = None
