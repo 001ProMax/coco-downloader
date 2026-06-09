@@ -85,6 +85,7 @@ class SearchCard(SimpleCardWidget):
         self.vBoxLayout.addWidget(self.progressBar)
 
     def _connect_signals(self):
+        self.searchInput.returnPressed.connect(self._on_return_pressed)
         self.platformComboBox.currentTextChanged.connect(self._on_platform_changed)
 
     def _on_search(self, keyword: str):
@@ -92,6 +93,10 @@ class SearchCard(SimpleCardWidget):
         if keyword.strip():
             platform = self.platformComboBox.currentText()
             self.searchRequested.emit(keyword, platform)
+
+    def _on_return_pressed(self) -> None:
+        """Search with the same behavior as the search button."""
+        self._on_search(self.searchInput.text())
 
     def clear_search(self):
         """Clear search input"""

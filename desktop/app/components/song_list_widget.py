@@ -433,6 +433,14 @@ class SongRow(QWidget):
 
         self._apply_state(self._current_widget_state(), self._current_card_state())
 
+    def mouseDoubleClickEvent(self, event) -> None:
+        """Play the row with the same behavior as the play button."""
+        super().mouseDoubleClickEvent(event)
+        if event.button() != Qt.LeftButton:
+            return
+        self._toggle_play()
+        event.accept()
+
     def _current_widget_state(self) -> WidgetState:
         if self.is_selected:
             return WidgetState.SELECTED

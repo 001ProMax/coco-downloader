@@ -286,6 +286,13 @@ class PlaybackService(QObject):
 
     def _connect_signals(self) -> None:
         signalBus.playPlaylistRequested.connect(self.set_playlist)
+        signalBus.playbackToggleRequested.connect(self.toggle_play)
+        signalBus.playbackPreviousRequested.connect(self.play_previous)
+        signalBus.playbackNextRequested.connect(self.play_next)
+        signalBus.playbackSeekRequested.connect(self.player.setPosition)
+        signalBus.playbackVolumeChanged.connect(self.set_volume)
+        signalBus.playbackMuteRequested.connect(self.toggle_mute)
+        signalBus.playbackModeChanged.connect(self.set_mode)
         self.play_bar.playPauseRequested.connect(self.toggle_play)
         self.play_bar.previousRequested.connect(self.play_previous)
         self.play_bar.nextRequested.connect(self.play_next)
@@ -293,7 +300,9 @@ class PlaybackService(QObject):
         self.play_bar.volumeChanged.connect(self.set_volume)
         self.play_bar.muteRequested.connect(self.toggle_mute)
         self.play_bar.positionChanged.connect(self.player.setPosition)
+        self.play_bar.songCardClicked.connect(signalBus.switchToPlayingInterfaceRequested)
         self.player.positionChanged.connect(self.play_bar.set_position)
+        self.player.positionChanged.connect(lambda position: signalBus.playbackPositionChanged.emit(int(position)))
         self.player.durationChanged.connect(self._on_duration_changed)
         self.player.stateChanged.connect(self._on_state_changed)
         self.player.mediaStatusChanged.connect(self._on_media_status_changed)
@@ -363,17 +372,21 @@ class PlaybackService(QObject):
         pixmap = QPixmap()
         pixmap.loadFromData(image_bytes)
         self.play_bar.set_cover_pixmap(pixmap)
+        signalBus.playbackCoverChanged.emit(pixmap, color)
         if isinstance(color, QColor) and color.isValid():
             self.play_bar.animate_color(color)
 
     def _on_duration_changed(self, duration: int) -> None:
         if duration > 0:
             self.play_bar.progress_bar.set_total_time(duration // 1000)
+            signalBus.playbackDurationChanged.emit(duration)
 
     def _on_state_changed(self, state: QMediaPlayer.State) -> None:
         if state == QMediaPlayer.PlayingState:
             self.has_started_current_media = True
-        self.play_bar.set_playing(state == QMediaPlayer.PlayingState)
+        is_playing = state == QMediaPlayer.PlayingState
+        self.play_bar.set_playing(is_playing)
+        signalBus.playbackStateChanged.emit(is_playing)
 
     def _on_media_status_changed(self, status: QMediaPlayer.MediaStatus) -> None:
         if status == QMediaPlayer.InvalidMedia:

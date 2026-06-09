@@ -379,6 +379,8 @@ class SongTextWidget(QWidget):
 
 
 class PlayBarSongCard(QWidget):
+    clicked = pyqtSignal()
+
     def __init__(self, song: PlayBarSongInfo, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.cover_label = QLabel(self)
@@ -406,6 +408,11 @@ class PlayBarSongCard(QWidget):
     def leaveEvent(self, event) -> None:
         super().leaveEvent(event)
         self.mask.hide()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton and self.cover_label.geometry().contains(event.pos()):
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
 
     def _init_widget(self, song: PlayBarSongInfo) -> None:
         self.setFixedSize(405, 115)
@@ -516,6 +523,7 @@ class PlayBar(QWidget):
     volumeChanged = pyqtSignal(int)
     muteRequested = pyqtSignal()
     positionChanged = pyqtSignal(int)
+    songCardClicked = pyqtSignal()
 
     def __init__(self, song: PlayBarSongInfo | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -614,5 +622,6 @@ class PlayBar(QWidget):
         self.right_group.volume_slider.valueChanged.connect(self.volumeChanged)
         self.progress_bar.slider.clicked.connect(self.positionChanged)
         self.progress_bar.slider.sliderMoved.connect(self.positionChanged)
+        self.song_card.clicked.connect(self.songCardClicked)
 
     barColor = pyqtProperty(QColor, get_bar_color, set_bar_color)
